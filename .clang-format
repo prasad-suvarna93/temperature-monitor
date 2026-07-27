@@ -1,0 +1,12 @@
+# House style: Google base, 120 columns, pointer binds to the type.
+BasedOnStyle: Google
+ColumnLimit: 120
+DerivePointerAlignment: false
+PointerAlignment: Left
+AlignConsecutiveAssignments: true
+BinPackArguments: false
+BinPackParameters: false
+AllowShortCaseLabelsOnASingleLine: true
+SpaceBeforeCpp11BracedList: true
+BreakInheritanceList: AfterColon
+ReflowComments: false
