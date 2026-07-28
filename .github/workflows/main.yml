@@ -1,0 +1,30 @@
+name: build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host:
+    name: host build — C and C++
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compiler version
+        run: gcc --version && g++ --version
+
+      - name: C — build and run the test suite
+        run: make -C c test
+
+      - name: C++ — build and run the test suite
+        run: make -C cpp test
+
+      - name: C — scripted demo
+        run: make -C c demo
+
+      - name: C++ — scripted demo
+        run: make -C cpp demo
