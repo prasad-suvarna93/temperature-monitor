@@ -1,4 +1,3 @@
-// composition root
 #include "monitor.h"
 
 #include <stddef.h>
@@ -15,7 +14,8 @@ static void EnterFault(monitor_t* mon, fault_reason_e why) {
 }
 
 bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
-  mon->condition        = COND_FAULT;
+  // init every field explicitly so a missed one is visible
+  mon->condition        = COND_FAULT;  // fault until proven otherwise
   mon->fault            = FAULT_NONE;
   mon->config_faulted   = false;
   mon->last_block_ms    = now_ms;
@@ -27,9 +27,8 @@ bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
   SampleQueueInit(&mon->q);
 
   (void)HalGpioInit();
-  IndicatorInvalidate();
+  IndicatorInvalidate();  // pin state after reset is unknown
 
-  // read identity before sampling
   const devinfo_status_e st = DeviceInfoLoad(&mon->info);
   if (st != DEVINFO_OK) {
     mon->config_faulted = true;
@@ -38,9 +37,16 @@ bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
   }
 
   if (!SensorCalForRevision(mon->info.revision, &mon->cal)) {
+    // record parsed but names a revision with no calibration
     mon->config_faulted = true;
     EnterFault(mon, FAULT_CONFIG);
     return false;
+  }
+
+  // on Rev-A a 0.5 degC band is smaller than one count so floor it
+  {
+    const temp_mdc_t lsb_mdc = mon->cal.num / mon->cal.den;
+    if (mon->class_cfg.hysteresis_mdc < lsb_mdc) mon->class_cfg.hysteresis_mdc = lsb_mdc;
   }
 
   if (!HalAdcInit(SAMPLE_PERIOD_US, MonitorOnBlock, mon) || !HalAdcStart()) {
@@ -48,7 +54,7 @@ bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
     return false;
   }
 
-  // stay in fault until the first block arrives
+  // no reading yet so stay in fault until the first block
   mon->fault = FAULT_NO_SAMPLES;
   return true;
 }
@@ -57,19 +63,18 @@ FAST_TEXT
 void MonitorOnBlock(uint8_t block_index, void* ctx) {
   monitor_t* mon = (monitor_t*)ctx;
 
-  // the ISR does one push only
   (void)SampleQueuePush(&mon->q, block_index);
 }
 
 void MonitorPoll(monitor_t* mon, uint32_t now_ms) {
-  // config fault latches so check it first
+  // a config fault is latched so check it first
   if (mon->config_faulted) {
     EnterFault(mon, FAULT_CONFIG);
     goto annunciate;
   }
 
   {
-    // drain to the newest and drop the rest
+    // drain to the newest and count what was dropped
     uint8_t idx    = 0u;
     uint8_t newest = 0u;
     bool got       = false;
@@ -81,7 +86,7 @@ void MonitorPoll(monitor_t* mon, uint32_t now_ms) {
     }
 
     if (!got) {
-      // an empty queue is normal so fault only after the timeout
+      // nothing arrived fault only after silence beats the timeout
       if ((uint32_t)(now_ms - mon->last_block_ms) > SAMPLE_TIMEOUT_MS) EnterFault(mon, FAULT_NO_SAMPLES);
 
       goto annunciate;
@@ -98,7 +103,7 @@ void MonitorPoll(monitor_t* mon, uint32_t now_ms) {
 
     const adc_raw_t median = FilterMedian(blk, (uint16_t)SAMPLES_PER_BLOCK, mon->scratch);
 
-    // check the rail before scaling
+    // check the rail before scaling an open input is a wiring fault
     if (FilterAtRail(median)) {
       EnterFault(mon, FAULT_SENSOR_RAIL);
       goto annunciate;
@@ -111,6 +116,7 @@ void MonitorPoll(monitor_t* mon, uint32_t now_ms) {
       goto annunciate;
     }
 
+    // COND_FAULT as prev tells the classifier there is no history
     mon->last_temp_mdc = temp;
     mon->condition     = ClassifierStep(&mon->class_cfg, mon->condition, temp);
     mon->fault         = FAULT_NONE;

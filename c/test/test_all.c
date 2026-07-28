@@ -419,6 +419,51 @@ static void TestIntegrationRevb(void) {
   CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
 }
 
+static void TestHysteresisFloor(void) {
+  SECTION("monitor: hysteresis is floored at one sensor count");
+
+  monitor_t mon;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+  CHECK_EQ(mon.class_cfg.hysteresis_mdc, HYSTERESIS_MDC);
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_A, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+  CHECK_EQ(mon.class_cfg.hysteresis_mdc, 1000);
+
+  // Rev-A holds critical at 104 degC the first value below it can report
+  StepAt(&mon, HW_REV_A, 110000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_CRITICAL_HOT);
+
+  StepAt(&mon, HW_REV_A, 104000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_CRITICAL_HOT);
+
+  StepAt(&mon, HW_REV_A, 103000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_WARNING);
+}
+
+static void TestIntegrationReva(void) {
+  SECTION("integration: Rev-A reaches the same lamps from different digits");
+
+  monitor_t mon;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_A, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+  CHECK_EQ(mon.info.revision, HW_REV_A);
+
+  // 90 degC is raw 90 on Rev-A and raw 900 on Rev-B yet the same lamp
+  StepAt(&mon, HW_REV_A, 90000, 7u);
+  CHECK_EQ(MonitorLastTempMdc(&mon), 90000);
+  CHECK_EQ(MonitorCondition(&mon), COND_WARNING);
+
+  StepAt(&mon, HW_REV_A, 30000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+}
+
 static void TestIntegrationNoiseAndSpikes(void) {
   SECTION("integration: noise and glitches do not move the lamp");
 
@@ -551,6 +596,8 @@ int main(void) {
   TestIndicator();
   TestSampleQueue();
   TestIntegrationRevb();
+  TestHysteresisFloor();
+  TestIntegrationReva();
   TestIntegrationNoiseAndSpikes();
   TestIntegrationFaults();
   TestIntegrationBacklog();
