@@ -8,7 +8,6 @@ static bool s_valid;
 
 led_pattern_t IndicatorPattern(condition_e cond, uint32_t now_ms) {
   led_pattern_t pattern = {.on = {false, false, false}};
-  (void)now_ms;
 
   switch (cond) {
     case COND_NORMAL: pattern.on[LED_GREEN] = true; break;
@@ -19,11 +18,12 @@ led_pattern_t IndicatorPattern(condition_e cond, uint32_t now_ms) {
     case COND_CRITICAL_COLD: pattern.on[LED_RED] = true; break;
 
     case COND_FAULT:
-      // a fault must not look normal
-      pattern.on[LED_RED] = true;
+      // blink off the free running clock so a late loop skips a phase
+      pattern.on[LED_RED] = ((now_ms / FAULT_BLINK_HALF_PERIOD_MS) & 1u) != 0u;
       break;
 
     default:
+      // unreachable but a fault must never look normal
       pattern.on[LED_RED] = true;
       break;
   }

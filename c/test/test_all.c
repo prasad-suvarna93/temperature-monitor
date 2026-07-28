@@ -1,13 +1,65 @@
 // Host tests: everything above the HAL.
 
+#include <string.h>
 #include "config.h"
+#include "device_info.h"
 #include "sensor.h"
 #include "filter.h"
 #include "classifier.h"
+#include "indicator.h"
+#include "sample_queue.h"
+#include "host_hal.h"
 #include "test.h"
 
 int g_checks;
 int g_failures;
+
+static void TestDeviceInfo(void) {
+  SECTION("device_info: identity record");
+
+  device_info_t info;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_A, "ABC1234");
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_OK);
+  CHECK_EQ(info.revision, HW_REV_A);
+  CHECK_STR(info.serial, "ABC1234");
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "XYZ9876");
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_OK);
+  CHECK_EQ(info.revision, HW_REV_B);
+  CHECK_STR(info.serial, "XYZ9876");
+
+  // a failed read must not leave a plausible record behind
+  HostReset();
+  HostEepromProgramValid(HW_REV_A, "ABC1234");
+  HostEepromSetBusFail(true);
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_BUS);
+
+  // blank device reads 0xFF everywhere
+  HostReset();
+  {
+    uint8_t blank[EE_RECORD_LEN];
+    memset(blank, 0xFF, sizeof blank);
+    HostEepromProgramRaw(blank, sizeof blank);
+  }
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_MAGIC);
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  HostEepromCorruptCrc();
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_CRC);
+
+  // valid record but unknown revision must not fall back to Rev-A
+  HostReset();
+  {
+    uint8_t rec[EE_RECORD_LEN] = {0x5Au, 0xC5u, 0x07u, 'Q', 'Q', 'Q', '0', '0', '0', '1', 0x00u};
+    rec[EE_RECORD_LEN - 1u]    = DeviceInfoCrc8(rec, EE_RECORD_LEN - 1u);
+    HostEepromProgramRaw(rec, sizeof rec);
+  }
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_REVISION);
+}
 
 static void TestSensor(void) {
   SECTION("sensor: both revisions scale to one unit");
@@ -229,16 +281,102 @@ static void TestClassifierSweep(void) {
   }
 }
 
+static void TestIndicator(void) {
+  SECTION("indicator: one lamp per condition");
+
+  led_pattern_t pattern;
+
+  pattern = IndicatorPattern(COND_NORMAL, 0u);
+  CHECK(pattern.on[LED_GREEN] && !pattern.on[LED_YELLOW] && !pattern.on[LED_RED]);
+
+  pattern = IndicatorPattern(COND_WARNING, 0u);
+  CHECK(!pattern.on[LED_GREEN] && pattern.on[LED_YELLOW] && !pattern.on[LED_RED]);
+
+  // both critical bands drive the same red lamp
+  pattern = IndicatorPattern(COND_CRITICAL_HOT, 0u);
+  CHECK(!pattern.on[LED_GREEN] && !pattern.on[LED_YELLOW] && pattern.on[LED_RED]);
+
+  pattern = IndicatorPattern(COND_CRITICAL_COLD, 0u);
+  CHECK(!pattern.on[LED_GREEN] && !pattern.on[LED_YELLOW] && pattern.on[LED_RED]);
+
+  SECTION("indicator: fault blinks, and never shows green");
+
+  CHECK(!IndicatorPattern(COND_FAULT, 0u).on[LED_RED]);
+  CHECK(IndicatorPattern(COND_FAULT, 250u).on[LED_RED]);
+  CHECK(!IndicatorPattern(COND_FAULT, 500u).on[LED_RED]);
+  CHECK(IndicatorPattern(COND_FAULT, 750u).on[LED_RED]);
+
+  // a device that cannot measure never shows the all-is-well lamp
+  for (uint32_t t = 0u; t < 2000u; t += 37u) {
+    const led_pattern_t fault_pat = IndicatorPattern(COND_FAULT, t);
+    CHECK(!fault_pat.on[LED_GREEN] && !fault_pat.on[LED_YELLOW]);
+  }
+
+  SECTION("indicator: only changed lamps reach the pin");
+
+  HostReset();
+  IndicatorInvalidate();
+
+  const led_pattern_t normal = IndicatorPattern(COND_NORMAL, 0u);
+  IndicatorApply(&normal);
+  const uint32_t after_first = HostLedWriteCount();
+  CHECK_EQ(after_first, LED_COUNT);
+
+  IndicatorApply(&normal);
+  CHECK_EQ(HostLedWriteCount(), after_first);
+
+  const led_pattern_t warn = IndicatorPattern(COND_WARNING, 0u);
+  IndicatorApply(&warn);
+  CHECK_EQ(HostLedWriteCount(), after_first + 2u);
+}
+
+static void TestSampleQueue(void) {
+  SECTION("sample_queue: fills, drains, and drops rather than blocks");
+
+  sample_queue_t queue;
+  uint8_t v;
+
+  SampleQueueInit(&queue);
+  CHECK(!SampleQueuePop(&queue, &v));
+
+  for (uint8_t i = 0u; i < (uint8_t)SAMPLE_QUEUE_DEPTH; ++i) CHECK(SampleQueuePush(&queue, i));
+
+  // full so the interrupt drops and counts rather than blocking
+  CHECK(!SampleQueuePush(&queue, 99u));
+  CHECK_EQ(SampleQueueOverruns(&queue), 1u);
+
+  CHECK(!SampleQueuePush(&queue, 99u));
+  CHECK_EQ(SampleQueueOverruns(&queue), 2u);
+
+  for (uint8_t i = 0u; i < (uint8_t)SAMPLE_QUEUE_DEPTH; ++i) {
+    CHECK(SampleQueuePop(&queue, &v));
+    CHECK_EQ(v, i);
+  }
+  CHECK(!SampleQueuePop(&queue, &v));
+
+  // many trips round the ring must not drift or alias
+  SampleQueueInit(&queue);
+  for (uint32_t n = 0u; n < 1000u; ++n) {
+    CHECK(SampleQueuePush(&queue, (uint8_t)(n & 0xFFu)));
+    CHECK(SampleQueuePop(&queue, &v));
+    CHECK_EQ(v, (uint8_t)(n & 0xFFu));
+  }
+  CHECK_EQ(SampleQueueOverruns(&queue), 0u);
+}
+
 
 int main(void) {
   printf("temperature monitor -- host tests (C)\n");
 
+  TestDeviceInfo();
   TestSensor();
   TestFilter();
   TestClassifierThresholds();
   TestClassifierHysteresis();
   TestClassifierChatter();
   TestClassifierSweep();
+  TestIndicator();
+  TestSampleQueue();
 
   printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return (g_failures == 0) ? 0 : 1;
