@@ -1,18 +1,27 @@
 // Host tests: everything above the HAL.
 
 #include <string.h>
+#include "classifier.h"
 #include "config.h"
 #include "device_info.h"
-#include "sensor.h"
 #include "filter.h"
-#include "classifier.h"
-#include "indicator.h"
-#include "sample_queue.h"
+#include "hal_time.h"
 #include "host_hal.h"
+#include "indicator.h"
+#include "monitor.h"
+#include "sample_queue.h"
+#include "sensor.h"
 #include "test.h"
 
 int g_checks;
 int g_failures;
+
+static void StepAt(monitor_t* mon, hw_rev_e rev, temp_mdc_t t_mdc, uint32_t dt_ms) {
+  HostAdcSetRaw(HostRawForTemp(rev, t_mdc));
+  HostAdcProduceBlock();
+  HostTimeAdvanceMs(dt_ms);
+  MonitorPoll(mon, HalTimeNowMs());
+}
 
 static void TestDeviceInfo(void) {
   SECTION("device_info: identity record");
@@ -364,6 +373,170 @@ static void TestSampleQueue(void) {
   CHECK_EQ(SampleQueueOverruns(&queue), 0u);
 }
 
+static void TestIntegrationRevb(void) {
+  SECTION("integration: Rev-B, sensor to lamp");
+
+  monitor_t mon;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+  CHECK(HostAdcRunning());
+
+  // before any block the device says it does not know the temperature
+  CHECK_EQ(MonitorCondition(&mon), COND_FAULT);
+  CHECK_EQ(MonitorFault(&mon), FAULT_NO_SAMPLES);
+
+  StepAt(&mon, HW_REV_B, 25000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+  CHECK_EQ(MonitorLastTempMdc(&mon), 25000);
+  CHECK(HostLed(LED_GREEN) && !HostLed(LED_YELLOW) && !HostLed(LED_RED));
+
+  StepAt(&mon, HW_REV_B, 85000, 7u);  // exactly the threshold
+  CHECK_EQ(MonitorCondition(&mon), COND_WARNING);
+  CHECK(!HostLed(LED_GREEN) && HostLed(LED_YELLOW) && !HostLed(LED_RED));
+
+  StepAt(&mon, HW_REV_B, 110000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_CRITICAL_HOT);
+  CHECK(!HostLed(LED_GREEN) && !HostLed(LED_YELLOW) && HostLed(LED_RED));
+
+  // inside the release band still critical and the lamp does not flicker
+  StepAt(&mon, HW_REV_B, 104600, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_CRITICAL_HOT);
+
+  StepAt(&mon, HW_REV_B, 104400, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_WARNING);
+
+  StepAt(&mon, HW_REV_B, 20000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+
+  // cold excursion the other red band
+  StepAt(&mon, HW_REV_B, 3000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_CRITICAL_COLD);
+  CHECK(HostLed(LED_RED));
+
+  StepAt(&mon, HW_REV_B, 20000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+}
+
+static void TestIntegrationNoiseAndSpikes(void) {
+  SECTION("integration: noise and glitches do not move the lamp");
+
+  monitor_t mon;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+
+  // parked under the threshold so noise alone must not raise a warning
+  HostAdcSetNoise(4u);
+  HostAdcSetRaw(HostRawForTemp(HW_REV_B, 84500));
+
+  for (uint32_t i = 0u; i < 200u; ++i) {
+    HostAdcProduceBlock();
+    HostTimeAdvanceMs(7u);
+    MonitorPoll(&mon, HalTimeNowMs());
+  }
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+
+  // a burst of glitches the median throws away where a mean would light red
+  HostAdcSetNoise(0u);
+  HostAdcSetRaw(HostRawForTemp(HW_REV_B, 50000));
+  HostAdcInjectSpike((adc_raw_t)ADC_RAW_MAX, 20u);
+  HostAdcProduceBlock();
+  HostTimeAdvanceMs(7u);
+  MonitorPoll(&mon, HalTimeNowMs());
+
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+  CHECK_EQ(MonitorLastTempMdc(&mon), 50000);
+}
+
+static void TestIntegrationFaults(void) {
+  SECTION("integration: a device that cannot measure never shows green");
+
+  monitor_t mon;
+
+  // eeprom unreadable so acquisition never starts
+  HostReset();
+  HostEepromSetBusFail(true);
+  CHECK(!MonitorInit(&mon, HalTimeNowMs()));
+  CHECK_EQ(MonitorCondition(&mon), COND_FAULT);
+  CHECK_EQ(MonitorFault(&mon), FAULT_CONFIG);
+  CHECK(!HostAdcRunning());
+
+  // latched so repairing the bus at runtime does not un-boot the device
+  HostEepromSetBusFail(false);
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  HostTimeAdvanceMs(1000u);
+  MonitorPoll(&mon, HalTimeNowMs());
+  CHECK_EQ(MonitorFault(&mon), FAULT_CONFIG);
+
+  SECTION("integration: converter at an end stop is a wiring fault");
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+
+  StepAt(&mon, HW_REV_B, 25000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+
+  HostAdcSetRaw((adc_raw_t)ADC_RAW_MAX);  // input open or shorted
+  HostAdcProduceBlock();
+  HostTimeAdvanceMs(7u);
+  MonitorPoll(&mon, HalTimeNowMs());
+  CHECK_EQ(MonitorCondition(&mon), COND_FAULT);
+  CHECK_EQ(MonitorFault(&mon), FAULT_SENSOR_RAIL);
+
+  // recovers on its own once the signal returns
+  StepAt(&mon, HW_REV_B, 25000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+  CHECK_EQ(MonitorFault(&mon), FAULT_NONE);
+
+  SECTION("integration: silence from the acquisition chain is a fault");
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+
+  StepAt(&mon, HW_REV_B, 25000, 7u);
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+
+  // inside the timeout the device holds its last reading
+  HostTimeAdvanceMs(50u);
+  MonitorPoll(&mon, HalTimeNowMs());
+  CHECK_EQ(MonitorCondition(&mon), COND_NORMAL);
+
+  // past the timeout the silence itself is the diagnosis
+  HostTimeAdvanceMs(100u);
+  MonitorPoll(&mon, HalTimeNowMs());
+  CHECK_EQ(MonitorCondition(&mon), COND_FAULT);
+  CHECK_EQ(MonitorFault(&mon), FAULT_NO_SAMPLES);
+}
+
+static void TestIntegrationBacklog(void) {
+  SECTION("integration: a late main loop takes the newest block, not the oldest");
+
+  monitor_t mon;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  CHECK(MonitorInit(&mon, HalTimeNowMs()));
+
+  HostAdcSetRaw(HostRawForTemp(HW_REV_B, 20000));
+  HostAdcProduceBlock();
+  HostAdcSetRaw(HostRawForTemp(HW_REV_B, 40000));
+  HostAdcProduceBlock();
+  HostAdcSetRaw(HostRawForTemp(HW_REV_B, 95000));
+  HostAdcProduceBlock();
+
+  HostTimeAdvanceMs(20u);
+  MonitorPoll(&mon, HalTimeNowMs());
+
+  CHECK_EQ(MonitorLastTempMdc(&mon), 95000);  // newest not first
+  CHECK_EQ(MonitorCondition(&mon), COND_WARNING);
+  CHECK_EQ(mon.blocks_skipped, 2u);
+}
+
 
 int main(void) {
   printf("temperature monitor -- host tests (C)\n");
@@ -377,6 +550,10 @@ int main(void) {
   TestClassifierSweep();
   TestIndicator();
   TestSampleQueue();
+  TestIntegrationRevb();
+  TestIntegrationNoiseAndSpikes();
+  TestIntegrationFaults();
+  TestIntegrationBacklog();
 
   printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return (g_failures == 0) ? 0 : 1;
