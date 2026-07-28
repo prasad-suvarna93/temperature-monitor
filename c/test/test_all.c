@@ -1,14 +1,64 @@
 // Host tests: everything above the HAL.
 
+#include <string.h>
 #include "config.h"
+#include "device_info.h"
 #include "sensor.h"
 #include "filter.h"
 #include "classifier.h"
 #include "sample_queue.h"
+#include "host_hal.h"
 #include "test.h"
 
 int g_checks;
 int g_failures;
+
+static void TestDeviceInfo(void) {
+  SECTION("device_info: identity record");
+
+  device_info_t info;
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_A, "ABC1234");
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_OK);
+  CHECK_EQ(info.revision, HW_REV_A);
+  CHECK_STR(info.serial, "ABC1234");
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "XYZ9876");
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_OK);
+  CHECK_EQ(info.revision, HW_REV_B);
+  CHECK_STR(info.serial, "XYZ9876");
+
+  // a failed read must not leave a plausible record behind
+  HostReset();
+  HostEepromProgramValid(HW_REV_A, "ABC1234");
+  HostEepromSetBusFail(true);
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_BUS);
+
+  // blank device reads 0xFF everywhere
+  HostReset();
+  {
+    uint8_t blank[EE_RECORD_LEN];
+    memset(blank, 0xFF, sizeof blank);
+    HostEepromProgramRaw(blank, sizeof blank);
+  }
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_MAGIC);
+
+  HostReset();
+  HostEepromProgramValid(HW_REV_B, "ABC1234");
+  HostEepromCorruptCrc();
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_CRC);
+
+  // valid record but unknown revision must not fall back to Rev-A
+  HostReset();
+  {
+    uint8_t rec[EE_RECORD_LEN] = {0x5Au, 0xC5u, 0x07u, 'Q', 'Q', 'Q', '0', '0', '0', '1', 0x00u};
+    rec[EE_RECORD_LEN - 1u]    = DeviceInfoCrc8(rec, EE_RECORD_LEN - 1u);
+    HostEepromProgramRaw(rec, sizeof rec);
+  }
+  CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_REVISION);
+}
 
 static void TestSensor(void) {
   SECTION("sensor: both revisions scale to one unit");
@@ -268,6 +318,7 @@ static void TestSampleQueue(void) {
 int main(void) {
   printf("temperature monitor -- host tests (C)\n");
 
+  TestDeviceInfo();
   TestSensor();
   TestFilter();
   TestClassifierThresholds();
