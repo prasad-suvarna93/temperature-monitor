@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+// register qualifier spelled the way vendor headers do
 #define __IO volatile
 
 // timer owns the sampling instant

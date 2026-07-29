@@ -1,3 +1,8 @@
+// Composition root that owns all state and fixes the order of every step
+// boot    read identity then pick calibration then start acquisition
+// isr     push one block index and nothing else
+// loop    newest block then median then rail check then scale then
+//         plausibility then classify then drive the lamps
 #include "monitor.h"
 
 #include <stddef.h>
@@ -29,6 +34,8 @@ bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
   (void)HalGpioInit();
   IndicatorInvalidate();  // pin state after reset is unknown
 
+  // identity comes first because until the revision is known
+  // a raw digit cannot be turned into a temperature
   const devinfo_status_e st = DeviceInfoLoad(&mon->info);
   if (st != DEVINFO_OK) {
     mon->config_faulted = true;
@@ -43,7 +50,11 @@ bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
     return false;
   }
 
-  // on Rev-A a 0.5 degC band is smaller than one count so floor it
+  // floor the hysteresis at one count of the fitted sensor
+  // on Rev-A one count is 1 degC so a 0.5 degC band falls in a gap
+  // the sensor can never land in and the lamp would drop with no
+  // hysteresis at all. asking the sensor for its resolution keeps
+  // this working for any future revision
   {
     const temp_mdc_t lsb_mdc = mon->cal.num / mon->cal.den;
     if (mon->class_cfg.hysteresis_mdc < lsb_mdc) mon->class_cfg.hysteresis_mdc = lsb_mdc;
@@ -59,6 +70,9 @@ bool MonitorInit(monitor_t* mon, uint32_t now_ms) {
   return true;
 }
 
+// runs in interrupt context. one push and nothing else so the worst
+// case equals the best case. a full queue drops the block and the
+// poll side counts it
 FAST_TEXT
 void MonitorOnBlock(uint8_t block_index, void* ctx) {
   monitor_t* mon = (monitor_t*)ctx;
@@ -75,6 +89,8 @@ void MonitorPoll(monitor_t* mon, uint32_t now_ms) {
 
   {
     // drain to the newest and count what was dropped
+    // an older pending block is up to 19 ms stale and an indicator
+    // only ever wants the freshest reading
     uint8_t idx    = 0u;
     uint8_t newest = 0u;
     bool got       = false;
@@ -123,7 +139,8 @@ void MonitorPoll(monitor_t* mon, uint32_t now_ms) {
   }
 
 annunciate:
-  // drive the lamps on every path including faults
+  // single exit so the lamps are driven on every path including faults
+  // an early return would stop updating them exactly when something is wrong
   {
     const led_pattern_t pattern = IndicatorPattern(mon->condition, now_ms);
     IndicatorApply(&pattern);

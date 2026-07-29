@@ -35,7 +35,7 @@ typedef struct {
 
   temp_mdc_t last_temp_mdc;
   uint32_t blocks_processed;
-  uint32_t blocks_skipped;
+  uint32_t blocks_skipped;  // stale blocks dropped when the loop fell behind
 
   // filter workspace kept here so the filter stays pure
   adc_raw_t scratch[SAMPLES_PER_BLOCK];

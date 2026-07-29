@@ -1,3 +1,4 @@
+// scales raw ADC digits to milli degrees Celsius
 #ifndef TEMPERATURE_SENSOR_HPP
 #define TEMPERATURE_SENSOR_HPP
 
@@ -18,6 +19,8 @@ class ITemperatureSensor {
 };
 
 // affine case raw times num over den plus offset
+// gain is num over den in milli degC per digit
+// a fractional gain like 62.5 stays exact as 125 over 2
 class LinearSensor : public ITemperatureSensor {
  public:
   LinearSensor(std::int32_t num, std::int32_t den, MilliCelsius offset, const char* name) noexcept

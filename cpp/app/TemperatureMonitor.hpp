@@ -1,3 +1,4 @@
+// top level flow from sample block to condition and lamp
 #ifndef TEMPERATURE_MONITOR_HPP
 #define TEMPERATURE_MONITOR_HPP
 

@@ -1,3 +1,4 @@
+// hardware interfaces the application depends on
 #ifndef HAL_HPP
 #define HAL_HPP
 

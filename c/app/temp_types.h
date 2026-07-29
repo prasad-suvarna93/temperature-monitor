@@ -1,12 +1,14 @@
+// Shared types and enums for the temperature monitor
 #ifndef TEMP_TYPES_H
 #define TEMP_TYPES_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
+// signed for the cold band and integer so threshold compares are exact
 typedef int32_t temp_mdc_t;  // milli-degrees Celsius
 
-typedef uint16_t adc_raw_t;
+typedef uint16_t adc_raw_t;  // raw converter digits 0 to 4095
 
 #define MDC_PER_DEGC 1000
 
@@ -21,7 +23,12 @@ typedef enum {
   COND_FAULT
 } condition_e;
 
-typedef enum { LED_GREEN = 0, LED_YELLOW, LED_RED, LED_COUNT } led_id_e;
+typedef enum { 
+  LED_GREEN = 0,
+  LED_YELLOW, 
+  LED_RED, 
+  LED_COUNT 
+} led_id_e;
 
 // do not renumber these values are stored in eeprom
 typedef enum {

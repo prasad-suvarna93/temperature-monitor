@@ -150,7 +150,7 @@ static const Classifier::Config kLiteral {
     config::kWarning, config::kCriticalHot, config::kCriticalCold, MilliCelsius {0}};
 
 static void test_classifier_thresholds() {
-  SECTION("Classifier: the thresholds, exactly as specified");
+  SECTION("Classifier: the thresholds exactly as specified");
 
   // 85 degC is the warning edge one milli below is still normal
   CHECK(from(Condition::Normal, MilliCelsius {84999}) == Condition::Normal);
@@ -197,7 +197,7 @@ static void test_classifier_hysteresis() {
   CHECK(from(Condition::Fault, MilliCelsius {84999}) == Condition::Normal);
   CHECK(from(Condition::Fault, degC(90)) == Condition::Warning);
 
-  SECTION("Classifier: literal specification behaviour, hysteresis disabled");
+  SECTION("Classifier: literal specification with hysteresis disabled");
 
   // band at zero is the literal requirement
   CHECK(from(Condition::Warning, MilliCelsius {84999}, kLiteral) == Condition::Normal);
@@ -207,7 +207,7 @@ static void test_classifier_hysteresis() {
 
 // sit a noisy signal on the threshold and count lamp changes
 static void test_classifier_chatter() {
-  SECTION("Classifier: hysteresis is worth what it costs");
+  SECTION("Classifier: hysteresis stops the lamp chatter");
 
   Classifier withHyst {};
   Classifier without {kLiteral};
@@ -229,7 +229,7 @@ static void test_classifier_chatter() {
 
   std::printf(
       "      lamp changes over 1000 samples on the threshold:"
-      " %u with hysteresis, %u without\n",
+      " %u with hysteresis and %u without\n",
       nHyst,
       nLiteral);
 
@@ -294,7 +294,7 @@ static void test_indicator() {
   pattern = Indicator::patternFor(Condition::CriticalCold, 0);
   CHECK(!pattern[green] && !pattern[yellow] && pattern[red]);
 
-  SECTION("Indicator: fault blinks, and never shows green");
+  SECTION("Indicator: fault blinks and never shows green");
 
   CHECK(!Indicator::patternFor(Condition::Fault, 0)[red]);
   CHECK(Indicator::patternFor(Condition::Fault, 250)[red]);
@@ -325,7 +325,7 @@ static void test_indicator() {
 }
 
 static void test_sample_queue() {
-  SECTION("SampleQueue: fills, drains, and drops rather than blocks");
+  SECTION("SampleQueue: fills and drains and drops instead of blocking");
 
   SampleQueue<4> queue;
   std::uint8_t val = 0;
@@ -357,7 +357,7 @@ static void test_sample_queue() {
 }
 
 static void test_integration_revb() {
-  SECTION("integration: Rev-B, sensor to lamp");
+  SECTION("integration: Rev-B from sensor to lamp");
 
   Fixture fix;
   fix.eeprom.programValid(HwRevision::RevB, "ABC1234");
@@ -531,7 +531,7 @@ static void test_integration_faults() {
 
 // samples are hardware triggered so a late loop just gets a backlog
 static void test_integration_backlog() {
-  SECTION("integration: a late main loop takes the newest block, not the oldest");
+  SECTION("integration: a late main loop takes the newest block");
 
   Fixture fix;
   fix.eeprom.programValid(HwRevision::RevB, "ABC1234");
@@ -556,7 +556,7 @@ static void test_integration_backlog() {
 
 // two monitors in one process
 static void test_two_devices_at_once() {
-  SECTION("integration: two devices, different revisions, same process");
+  SECTION("integration: two devices with different revisions in one process");
 
   Fixture fixA;
   Fixture fixB;
@@ -581,7 +581,7 @@ static void test_two_devices_at_once() {
 }
 
 int main() {
-  std::printf("temperature monitor -- host tests (C++)\n");
+  std::printf("temperature monitor host tests (C++)\n");
   test_device_info();
   test_sensors();
   test_filter();
@@ -599,6 +599,6 @@ int main() {
   test_integration_backlog();
   test_two_devices_at_once();
 
-  std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
+  std::printf("\n%d checks and %d failures\n", g_checks, g_failures);
   return (g_failures == 0) ? 0 : 1;
 }

@@ -6,6 +6,11 @@
 
 #define SERIAL_LEN 8u
 
+// record layout in the EEPROM
+//   0x00  magic 0x5A 0xC5
+//   0x02  revision
+//   0x03  serial 8 bytes
+//   0x0B  crc8 over the first 11 bytes
 #define EE_ADDR_BASE 0x0000u
 #define EE_RECORD_LEN 12u
 

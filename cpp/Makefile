@@ -17,11 +17,16 @@
 # Together they also remove the unwind tables and the type-info records, which
 # on a part with 64 KB of flash is the difference between fitting and not.
 
+# optimisation level lives in one variable so a debugger build is just
+#   make OPT="-O0 -g3" ...
+# without forking the flag list
+OPT      ?= -O2
+
 CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra -Werror -Wconversion -Wshadow \
             -Wold-style-cast -Wnon-virtual-dtor -Woverloaded-virtual \
             -fno-exceptions -fno-rtti \
-            -O2 -g -DHOST_BUILD
+            $(OPT) -g -DHOST_BUILD
 INCS     := -Iapp -Ihal -Iport/host
 
 SRC := app/TemperatureSensor.cpp \
@@ -31,6 +36,10 @@ SRC := app/TemperatureSensor.cpp \
        app/TemperatureMonitor.cpp
 
 HOST := port/host/HostHal.cpp
+
+# Headers are prerequisites too -- an edit to Config.hpp must rebuild, or the
+# next run silently demonstrates yesterday's constants.
+HDRS := $(wildcard app/*.hpp hal/*.hpp port/host/*.hpp test/*.hpp)
 
 # Everything the style applies to, including port/target, which the host build
 # never compiles.
@@ -49,11 +58,11 @@ test: $(TESTBIN)
 demo: $(DEMOBIN)
 	@./$(DEMOBIN)
 
-$(TESTBIN): $(SRC) $(HOST) test/test_all.cpp | build
-	@$(CXX) $(CXXFLAGS) $(INCS) -Itest $^ -o $@
+$(TESTBIN): $(SRC) $(HOST) test/test_all.cpp $(HDRS) | build
+	@$(CXX) $(CXXFLAGS) $(INCS) -Itest $(filter %.cpp,$^) -o $@
 
-$(DEMOBIN): $(SRC) $(HOST) port/host/demo.cpp | build
-	@$(CXX) $(CXXFLAGS) $(INCS) $^ -o $@
+$(DEMOBIN): $(SRC) $(HOST) port/host/demo.cpp $(HDRS) | build
+	@$(CXX) $(CXXFLAGS) $(INCS) $(filter %.cpp,$^) -o $@
 
 format:
 	@clang-format -i $(FMTSRC)

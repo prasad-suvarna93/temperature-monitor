@@ -9,15 +9,24 @@
 # -Werror is not decoration. A warning in this tree is a defect that has not
 # been triaged yet, and the cheapest moment to triage it is now.
 
+# optimisation level lives in one variable so a debugger build is just
+#   make OPT="-O0 -g3" ...
+# without forking the flag list
+OPT     ?= -O2
+
 CC      := gcc
 CFLAGS  := -std=c11 -Wall -Wextra -Werror -Wconversion -Wshadow \
            -Wpointer-arith -Wcast-qual -Wstrict-prototypes \
-           -O2 -g -DHOST_BUILD
+           $(OPT) -g -DHOST_BUILD
 INCS    := -Iapp -Ihal -Iport/host
 
 # Whatever application modules exist so far, plus the host mock if it's present.
 SRC     := $(wildcard app/*.c)
 HOST    := $(wildcard port/host/host_hal.c)
+
+# Headers are prerequisites too -- an edit to config.h must rebuild, or the
+# next run silently demonstrates yesterday's constants.
+HDRS    := $(wildcard app/*.h hal/*.h port/host/*.h test/*.h)
 
 FMTSRC  := $(shell find app hal port test -name '*.c' -o -name '*.h' 2>/dev/null)
 
@@ -34,11 +43,11 @@ test: $(TESTBIN)
 demo: $(DEMOBIN)
 	@./$(DEMOBIN)
 
-$(TESTBIN): $(SRC) $(HOST) test/test_all.c | build
-	@$(CC) $(CFLAGS) $(INCS) -Itest $^ -o $@
+$(TESTBIN): $(SRC) $(HOST) test/test_all.c $(HDRS) | build
+	@$(CC) $(CFLAGS) $(INCS) -Itest $(filter %.c,$^) -o $@
 
-$(DEMOBIN): $(SRC) $(HOST) port/host/demo.c | build
-	@$(CC) $(CFLAGS) $(INCS) $^ -o $@
+$(DEMOBIN): $(SRC) $(HOST) port/host/demo.c $(HDRS) | build
+	@$(CC) $(CFLAGS) $(INCS) $(filter %.c,$^) -o $@
 
 format:
 	@clang-format -i $(FMTSRC)

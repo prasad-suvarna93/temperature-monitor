@@ -1,4 +1,4 @@
-// Host tests: everything above the HAL.
+// Host tests for everything above the HAL
 
 #include <string.h>
 #include "classifier.h"
@@ -23,6 +23,7 @@ static void StepAt(monitor_t* mon, hw_rev_e rev, temp_mdc_t t_mdc, uint32_t dt_m
   MonitorPoll(mon, HalTimeNowMs());
 }
 
+// identity record tests
 static void TestDeviceInfo(void) {
   SECTION("device_info: identity record");
 
@@ -70,6 +71,7 @@ static void TestDeviceInfo(void) {
   CHECK_EQ(DeviceInfoLoad(&info), DEVINFO_ERR_REVISION);
 }
 
+// sensor scaling tests
 static void TestSensor(void) {
   SECTION("sensor: both revisions scale to one unit");
 
@@ -97,6 +99,7 @@ static void TestSensor(void) {
   CHECK(!SensorCalForRevision((hw_rev_e)7, &cal));
 }
 
+// median filter tests
 static void TestFilter(void) {
   SECTION("filter: median rejects what a mean would not");
 
@@ -137,8 +140,9 @@ static void TestFilter(void) {
   CHECK(!FilterAtRail(2000u));
 }
 
+// classifier tests
 static void TestClassifierThresholds(void) {
-  SECTION("classifier: the thresholds, exactly as specified");
+  SECTION("classifier: the thresholds exactly as specified");
 
   const classifier_cfg_t* cfg = &CLASSIFIER_DEFAULT;
 
@@ -190,7 +194,7 @@ static void TestClassifierHysteresis(void) {
   CHECK_EQ(ClassifierStep(cfg, COND_FAULT, 84999), COND_NORMAL);
   CHECK_EQ(ClassifierStep(cfg, COND_FAULT, 90000), COND_WARNING);
 
-  SECTION("classifier: literal specification behaviour, hysteresis disabled");
+  SECTION("classifier: literal specification with hysteresis disabled");
 
   // with the band at zero the module matches the requirement to the letter
   const classifier_cfg_t literal = {
@@ -206,7 +210,7 @@ static void TestClassifierHysteresis(void) {
 }
 
 static void TestClassifierChatter(void) {
-  SECTION("classifier: hysteresis is worth what it costs");
+  SECTION("classifier: hysteresis stops the lamp chatter");
 
   const classifier_cfg_t literal = {
       .warning_mdc       = THRESH_WARNING_MDC,
@@ -238,7 +242,7 @@ static void TestClassifierChatter(void) {
 
   printf(
       "      lamp changes over 1000 samples on the threshold:"
-      " %u with hysteresis, %u without\n",
+      " %u with hysteresis and %u without\n",
       n_hyst,
       n_literal);
 
@@ -290,6 +294,7 @@ static void TestClassifierSweep(void) {
   }
 }
 
+// indicator tests
 static void TestIndicator(void) {
   SECTION("indicator: one lamp per condition");
 
@@ -308,7 +313,7 @@ static void TestIndicator(void) {
   pattern = IndicatorPattern(COND_CRITICAL_COLD, 0u);
   CHECK(!pattern.on[LED_GREEN] && !pattern.on[LED_YELLOW] && pattern.on[LED_RED]);
 
-  SECTION("indicator: fault blinks, and never shows green");
+  SECTION("indicator: fault blinks and never shows green");
 
   CHECK(!IndicatorPattern(COND_FAULT, 0u).on[LED_RED]);
   CHECK(IndicatorPattern(COND_FAULT, 250u).on[LED_RED]);
@@ -339,8 +344,9 @@ static void TestIndicator(void) {
   CHECK_EQ(HostLedWriteCount(), after_first + 2u);
 }
 
+// sample queue tests
 static void TestSampleQueue(void) {
-  SECTION("sample_queue: fills, drains, and drops rather than blocks");
+  SECTION("sample_queue: fills and drains and drops instead of blocking");
 
   sample_queue_t queue;
   uint8_t v;
@@ -373,8 +379,9 @@ static void TestSampleQueue(void) {
   CHECK_EQ(SampleQueueOverruns(&queue), 0u);
 }
 
+// integration tests through the monitor
 static void TestIntegrationRevb(void) {
-  SECTION("integration: Rev-B, sensor to lamp");
+  SECTION("integration: Rev-B from sensor to lamp");
 
   monitor_t mon;
 
@@ -559,7 +566,7 @@ static void TestIntegrationFaults(void) {
 }
 
 static void TestIntegrationBacklog(void) {
-  SECTION("integration: a late main loop takes the newest block, not the oldest");
+  SECTION("integration: a late main loop takes the newest block");
 
   monitor_t mon;
 
@@ -584,7 +591,7 @@ static void TestIntegrationBacklog(void) {
 
 
 int main(void) {
-  printf("temperature monitor -- host tests (C)\n");
+  printf("temperature monitor host tests (C)\n");
 
   TestDeviceInfo();
   TestSensor();
@@ -602,6 +609,6 @@ int main(void) {
   TestIntegrationFaults();
   TestIntegrationBacklog();
 
-  printf("\n%d checks, %d failures\n", g_checks, g_failures);
+  printf("\n%d checks and %d failures\n", g_checks, g_failures);
   return (g_failures == 0) ? 0 : 1;
 }

@@ -1,3 +1,4 @@
+// maps a temperature to a condition with hysteresis
 #ifndef CLASSIFIER_HPP
 #define CLASSIFIER_HPP
 
@@ -22,6 +23,9 @@ class Classifier {
   explicit Classifier(Config cfg = kDefault, Condition initial = Condition::Normal) noexcept
       : cfg_ {cfg}, condition_ {initial} {}
 
+  // classify one reading against the previous condition
+  // severity wins when the condition rules overlap
+  // enter a band at the stated threshold and leave it only after real recovery
   Condition update(MilliCelsius temp) noexcept;
 
   [[nodiscard]] Condition condition() const noexcept { return condition_; }

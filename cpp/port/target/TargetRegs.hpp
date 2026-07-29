@@ -1,3 +1,4 @@
+// register map and pin wiring for the target board
 #ifndef TARGET_REGS_HPP
 #define TARGET_REGS_HPP
 

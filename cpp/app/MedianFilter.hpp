@@ -1,3 +1,4 @@
+// takes the median of one sample block
 #ifndef MEDIAN_FILTER_HPP
 #define MEDIAN_FILTER_HPP
 

@@ -13,7 +13,7 @@ namespace tempmon {
 
 template <std::size_t Depth>
 class SampleQueue {
-  static_assert((Depth & (Depth - 1)) == 0, "depth must be a power of two -- the index masking assumes it");
+  static_assert((Depth & (Depth - 1)) == 0, "depth must be a power of two for the index masking");
   static_assert(Depth >= 2, "a queue of one cannot decouple anything");
 
  public:

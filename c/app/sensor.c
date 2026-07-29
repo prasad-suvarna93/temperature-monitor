@@ -18,7 +18,8 @@ bool SensorCalForRevision(hw_rev_e rev, sensor_cal_t* out) {
     return false;
   }
 
-  // a table hole zero fills so den 0 guards a divide
+  // if a new rev is added without full entries by default it will have zero
+  // which will lead to divide by zero error.
   if (CAL[rev].den == 0) {
     return false;
   }

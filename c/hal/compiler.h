@@ -1,3 +1,4 @@
+// build specific shims kept out of portable code
 #ifndef COMPILER_H
 #define COMPILER_H
 

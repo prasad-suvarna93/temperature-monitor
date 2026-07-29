@@ -1,3 +1,4 @@
+// fake hardware for the tests and the PC demo
 #ifndef HOST_HAL_HPP
 #define HOST_HAL_HPP
 

@@ -1,5 +1,7 @@
 #ifdef HOST_BUILD
 
+// scripted walk through the bands and the fault paths
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -84,34 +86,34 @@ static void RunProfile(hw_rev_e rev, const char* label) {
   const temp_mdc_t hyst = mon.class_cfg.hysteresis_mdc;
 
   Header(label);
-  printf("  serial %s, %s\n", mon.info.serial, mon.cal.name);
-  printf("  resolution %ld.%03ld degC, hysteresis %ld.%03ld degC\n",
+  printf("  serial %s  %s\n", mon.info.serial, mon.cal.name);
+  printf("  resolution %ld.%03ld degC  hysteresis %ld.%03ld degC\n",
          (long)(lsb / 1000),
          (long)(lsb % 1000),
          (long)(hyst / 1000),
          (long)(hyst % 1000));
 
   // warm-up through the bands
-  Step(&mon, rev, 20000, "cold start, normal");
+  Step(&mon, rev, 20000, "cold start normal");
   Step(&mon, rev, 70000, NULL);
   Step(&mon, rev, 85000 - lsb, "one count under the warning threshold");
-  Step(&mon, rev, 85000, "exactly 85.000 -- requirement says >=, so warn");
+  Step(&mon, rev, 85000, "exactly 85.000 and the rule says warn at 85");
   Step(&mon, rev, 95000, NULL);
   Step(&mon, rev, 105000 - lsb, "one count under critical");
-  Step(&mon, rev, 105000, "exactly 105.000 -- critical");
+  Step(&mon, rev, 105000, "exactly 105.000 so critical");
   Step(&mon, rev, 112000, NULL);
 
   // cooling down through the hysteresis bands
-  Step(&mon, rev, 105000 - hyst, "at the release point: still critical");
-  Step(&mon, rev, 105000 - hyst - lsb, "one count below it: released to warning");
-  Step(&mon, rev, 85000 - hyst, "at the release point: still warning");
-  Step(&mon, rev, 85000 - hyst - lsb, "one count below it: released to normal");
+  Step(&mon, rev, 105000 - hyst, "at the release point still critical");
+  Step(&mon, rev, 105000 - hyst - lsb, "one count below it released to warning");
+  Step(&mon, rev, 85000 - hyst, "at the release point still warning");
+  Step(&mon, rev, 85000 - hyst - lsb, "one count below it released to normal");
 
   // cold excursion the other red band
   Step(&mon, rev, 10000, NULL);
-  Step(&mon, rev, 5000, "exactly 5.000 -- requirement says <, so normal");
-  Step(&mon, rev, 5000 - lsb, "one count below 5 degC: critical, cold");
-  Step(&mon, rev, 5000 + hyst - lsb, "at the release point: still critical");
+  Step(&mon, rev, 5000, "exactly 5.000 and the rule says normal at 5");
+  Step(&mon, rev, 5000 - lsb, "one count below 5 degC so critical cold");
+  Step(&mon, rev, 5000 + hyst - lsb, "at the release point still critical");
   Step(&mon, rev, 5000 + hyst, "released to normal");
   Step(&mon, rev, 25000, NULL);
 }
@@ -133,7 +135,7 @@ static void RunFaults(void) {
   HostAdcProduceBlock();
   HostTimeAdvanceMs(BLOCK_PERIOD_US / 1000u);
   MonitorPoll(&mon, HalTimeNowMs());
-  PrintRow(&mon, HostRawForTemp(HW_REV_B, 50000), "20 of 64 conversions slammed to full scale -- median ignores them");
+  PrintRow(&mon, HostRawForTemp(HW_REV_B, 50000), "20 of 64 samples forced to full scale and the median ignores them");
 
   // sensor at an end stop
 
@@ -144,20 +146,20 @@ static void RunFaults(void) {
   MonitorPoll(&mon, HalTimeNowMs());
   PrintRow(&mon, (adc_raw_t)ADC_RAW_MAX, FaultReasonStr(MonitorFault(&mon)));
 
-  Step(&mon, HW_REV_B, 25000, "signal restored -- recovers on its own");
+  Step(&mon, HW_REV_B, 25000, "signal restored and it recovers on its own");
 
   // acquisition stops
 
   Header("acquisition chain goes quiet");
   HostTimeAdvanceMs(50u);
   MonitorPoll(&mon, HalTimeNowMs());
-  PrintRow(&mon, 0u, "50 ms of silence: inside the timeout, holds last reading");
+  PrintRow(&mon, 0u, "50 ms of silence is inside the timeout so hold the last reading");
 
   HostTimeAdvanceMs(100u);
   MonitorPoll(&mon, HalTimeNowMs());
   PrintRow(&mon, 0u, FaultReasonStr(MonitorFault(&mon)));
 
-  printf("     (red lamp is blinking at 2 Hz here -- sample the phase)\n");
+  printf("     (red lamp blinks at 2 Hz here)\n");
   for (uint32_t i = 0u; i < 4u; ++i) {
     HostTimeAdvanceMs(125u);
     MonitorPoll(&mon, HalTimeNowMs());
@@ -172,8 +174,8 @@ static void RunFaults(void) {
   if (!MonitorInit(&mon, HalTimeNowMs())) printf("  MonitorInit failed: %s\n", FaultReasonStr(MonitorFault(&mon)));
 
   printf("  acquisition started: %s\n", HostAdcRunning() ? "yes" : "no");
-  printf("  -- the revision is unknown, so no digit can be turned into a\n");
-  printf("     temperature. The device annunciates and does not pretend.\n");
+  printf("  revision unknown so a digit cannot become a temperature\n");
+  printf("  the device faults instead of guessing\n");
 
   // a revision this build does not know
 
@@ -186,15 +188,15 @@ static void RunFaults(void) {
   }
   if (!MonitorInit(&mon, HalTimeNowMs())) printf("  MonitorInit failed: %s\n", FaultReasonStr(MonitorFault(&mon)));
 
-  printf("  -- refusing to run beats defaulting to Rev-A: a Rev-B board read\n");
-  printf("     as Rev-A shows 8.5 degC while it sits at 85 degC.\n");
+  printf("  refuses to run instead of guessing Rev-A\n");
+  printf("  a Rev-B board read as Rev-A shows 8.5 degC at a real 85 degC\n");
 }
 
 int main(void) {
   ColourInit();
 
-  printf("temperature monitor -- PC demonstration (C)\n");
-  printf("sampling %u us, %u samples per block, block every %u us\n",
+  printf("temperature monitor PC demonstration (C)\n");
+  printf("sampling %u us  %u samples per block  block every %u us\n",
          SAMPLE_PERIOD_US,
          SAMPLES_PER_BLOCK,
          BLOCK_PERIOD_US);

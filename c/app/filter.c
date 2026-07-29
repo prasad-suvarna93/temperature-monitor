@@ -7,8 +7,10 @@
 adc_raw_t FilterMedian(const adc_raw_t* block, uint16_t n, adc_raw_t* scratch) {
   if (n == 0u) return 0u;  // no defined answer so the caller checks n
 
+  // copy the block into scratch memory so that the the input block is nevery mutated
   memcpy(scratch, block, (size_t)n * sizeof scratch[0]);
 
+  // Insertion sort
   for (uint16_t i = 1u; i < n; ++i) {
     const adc_raw_t key = scratch[i];
     uint16_t j          = i;

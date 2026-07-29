@@ -1,3 +1,4 @@
+// hooks for tests to script the fake HAL
 #ifndef HOST_HAL_H
 #define HOST_HAL_H
 
@@ -29,6 +30,7 @@ void HostAdcSetRaw(adc_raw_t raw);
 // what raw digit maps to this temperature on this revision
 adc_raw_t HostRawForTemp(hw_rev_e rev, temp_mdc_t t_mdc);
 
+// uniform noise with the given peak to peak span
 void HostAdcSetNoise(adc_raw_t lsb_pp);
 
 // corrupts the first count samples of the next block only

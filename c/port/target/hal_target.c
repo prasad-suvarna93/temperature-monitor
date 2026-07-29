@@ -1,5 +1,7 @@
 #ifndef HOST_BUILD
 
+// real hardware behind the HAL for the target build
+
 #include <stddef.h>
 
 #include "compiler.h"
@@ -75,6 +77,7 @@ FAST_TEXT
 void DMA_ADC_IRQHandler(void) {
   const uint32_t status = DMA_ADC->ISR;
 
+  // half and full flags each hand over half of the ring
   if (status & DMA_ISR_HTIF) {
     DMA_ADC->IFCR = DMA_ISR_HTIF;
     for (uint8_t b = 0u; b < (uint8_t)(SAMPLE_BLOCKS / 2u); ++b) s_cb(b, s_ctx);

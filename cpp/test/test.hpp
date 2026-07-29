@@ -1,3 +1,4 @@
+// tiny check macros for the host tests
 #ifndef TEST_HPP
 #define TEST_HPP
 
@@ -29,7 +30,7 @@ extern int g_failures;
     ++g_checks;                                                                                                 \
     if (a_ != e_) {                                                                                             \
       ++g_failures;                                                                                             \
-      std::printf("   FAIL  %s:%d  %s\n         got %ld, expected %ld\n", __FILE__, __LINE__, #actual, a_, e_); \
+      std::printf("   FAIL  %s:%d  %s\n         got %ld expected %ld\n", __FILE__, __LINE__, #actual, a_, e_); \
     }                                                                                                           \
   } while (0)
 
@@ -38,7 +39,7 @@ extern int g_failures;
     ++g_checks;                                                                                               \
     if (std::strcmp((actual), (expected)) != 0) {                                                             \
       ++g_failures;                                                                                           \
-      std::printf("   FAIL  %s:%d  got \"%s\", expected \"%s\"\n", __FILE__, __LINE__, (actual), (expected)); \
+      std::printf("   FAIL  %s:%d  got \"%s\" expected \"%s\"\n", __FILE__, __LINE__, (actual), (expected)); \
     }                                                                                                         \
   } while (0)
 

@@ -8,7 +8,7 @@
 #define SAMPLE_QUEUE_DEPTH SAMPLE_BLOCKS
 
 _Static_assert((SAMPLE_QUEUE_DEPTH & (SAMPLE_QUEUE_DEPTH - 1u)) == 0u,
-               "depth must be a power of two -- the index masking assumes it");
+               "depth must be a power of two for the index masking");
 
 typedef struct {
   // unsigned so the subtraction stays correct across the wrap

@@ -1,5 +1,6 @@
 #ifndef HOST_BUILD
 
+// target entry point with the whole loop driven by interrupts
 // nothing here is time critical
 #include "hal_eeprom.h"
 #include "hal_time.h"

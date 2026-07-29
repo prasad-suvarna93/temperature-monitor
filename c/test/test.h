@@ -28,7 +28,7 @@ extern int g_failures;
     g_checks++;                                                                                            \
     if (_a != _e) {                                                                                        \
       g_failures++;                                                                                        \
-      printf("   FAIL  %s:%d  %s\n         got %ld, expected %ld\n", __FILE__, __LINE__, #actual, _a, _e); \
+      printf("   FAIL  %s:%d  %s\n         got %ld expected %ld\n", __FILE__, __LINE__, #actual, _a, _e); \
     }                                                                                                      \
   } while (0)
 
@@ -37,7 +37,7 @@ extern int g_failures;
     g_checks++;                                                                                          \
     if (strcmp((actual), (expected)) != 0) {                                                             \
       g_failures++;                                                                                      \
-      printf("   FAIL  %s:%d  got \"%s\", expected \"%s\"\n", __FILE__, __LINE__, (actual), (expected)); \
+      printf("   FAIL  %s:%d  got \"%s\" expected \"%s\"\n", __FILE__, __LINE__, (actual), (expected)); \
     }                                                                                                    \
   } while (0)
 

@@ -1,3 +1,4 @@
+// device identity read from EEPROM the hardware revision and serial
 #ifndef DEVICE_INFO_HPP
 #define DEVICE_INFO_HPP
 
@@ -10,6 +11,12 @@
 namespace tempmon {
 
 constexpr std::size_t kSerialLen    = 8;
+
+// record layout in the EEPROM
+//   0x00  magic 0x5A 0xC5
+//   0x02  revision
+//   0x03  serial 8 bytes
+//   0x0B  crc8 over the first 11 bytes
 constexpr std::uint16_t kEepromBase = 0x0000;
 constexpr std::size_t kEepromRecLen = 12;
 

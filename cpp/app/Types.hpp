@@ -1,3 +1,4 @@
+// shared units and enums for the whole app
 #ifndef TYPES_HPP
 #define TYPES_HPP
 

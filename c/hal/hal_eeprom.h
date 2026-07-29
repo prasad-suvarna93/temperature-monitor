@@ -1,6 +1,7 @@
 #ifndef HAL_EEPROM_H
 #define HAL_EEPROM_H
 
+// reads the identity record from the serial EEPROM
 // read only and it blocks so use it once at boot
 
 #include <stdbool.h>

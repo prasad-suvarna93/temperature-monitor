@@ -1,4 +1,9 @@
 // Indicator maps a condition to lamp states
+//   normal         green steady
+//   warning        yellow steady
+//   critical       red steady
+//   fault          red blinking at 2 Hz
+// only one lamp is lit at a time
 #ifndef INDICATOR_H
 #define INDICATOR_H
 

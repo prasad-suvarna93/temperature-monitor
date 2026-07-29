@@ -93,31 +93,31 @@ void runProfile(HwRevision rev, const char* label) {
   const MilliCelsius hyst = dev.monitor.classifier().hysteresis();
 
   header(label);
-  std::printf("  serial %s, %s\n", dev.monitor.info().serial.data(), dev.monitor.sensor()->name());
-  std::printf("  resolution %ld.%03ld degC, hysteresis %ld.%03ld degC\n",
+  std::printf("  serial %s  %s\n", dev.monitor.info().serial.data(), dev.monitor.sensor()->name());
+  std::printf("  resolution %ld.%03ld degC  hysteresis %ld.%03ld degC\n",
               static_cast<long>(lsb.count() / 1000),
               static_cast<long>(lsb.count() % 1000),
               static_cast<long>(hyst.count() / 1000),
               static_cast<long>(hyst.count() % 1000));
 
-  step(dev, degC(20), "cold start, normal");
+  step(dev, degC(20), "cold start normal");
   step(dev, degC(70));
   step(dev, config::kWarning - lsb, "one count under the warning threshold");
-  step(dev, config::kWarning, "exactly 85.000 -- requirement says >=, so warn");
+  step(dev, config::kWarning, "exactly 85.000 and the rule says warn at 85");
   step(dev, degC(95));
   step(dev, config::kCriticalHot - lsb, "one count under critical");
-  step(dev, config::kCriticalHot, "exactly 105.000 -- critical");
+  step(dev, config::kCriticalHot, "exactly 105.000 so critical");
   step(dev, degC(112));
 
-  step(dev, config::kCriticalHot - hyst, "at the release point: still critical");
-  step(dev, config::kCriticalHot - hyst - lsb, "one count below it: released to warning");
-  step(dev, config::kWarning - hyst, "at the release point: still warning");
-  step(dev, config::kWarning - hyst - lsb, "one count below it: released to normal");
+  step(dev, config::kCriticalHot - hyst, "at the release point still critical");
+  step(dev, config::kCriticalHot - hyst - lsb, "one count below it released to warning");
+  step(dev, config::kWarning - hyst, "at the release point still warning");
+  step(dev, config::kWarning - hyst - lsb, "one count below it released to normal");
 
   step(dev, degC(10));
-  step(dev, config::kCriticalCold, "exactly 5.000 -- requirement says <, so normal");
-  step(dev, config::kCriticalCold - lsb, "one count below 5 degC: critical, cold");
-  step(dev, config::kCriticalCold + hyst - lsb, "at the release point: still critical");
+  step(dev, config::kCriticalCold, "exactly 5.000 and the rule says normal at 5");
+  step(dev, config::kCriticalCold - lsb, "one count below 5 degC so critical cold");
+  step(dev, config::kCriticalCold + hyst - lsb, "at the release point still critical");
   step(dev, config::kCriticalCold + hyst, "released to normal");
   step(dev, degC(25));
 }
@@ -137,7 +137,7 @@ void runFaults() {
   dev.monitor.poll();
   printRow(dev,
            rawForTemperature(*dev.monitor.sensor(), degC(50)),
-           "20 of 64 conversions slammed to full scale -- median ignores them");
+           "20 of 64 samples forced to full scale and the median ignores them");
 
   header("sensor open or shorted");
   dev.adc.setRaw(config::kAdcRawMax);
@@ -146,18 +146,18 @@ void runFaults() {
   dev.monitor.poll();
   printRow(dev, config::kAdcRawMax, toString(dev.monitor.fault()));
 
-  step(dev, degC(25), "signal restored -- recovers on its own");
+  step(dev, degC(25), "signal restored and it recovers on its own");
 
   header("acquisition chain goes quiet");
   dev.clock.advance(50);
   dev.monitor.poll();
-  printRow(dev, 0, "50 ms of silence: inside the timeout, holds last reading");
+  printRow(dev, 0, "50 ms of silence is inside the timeout so hold the last reading");
 
   dev.clock.advance(100);
   dev.monitor.poll();
   printRow(dev, 0, toString(dev.monitor.fault()));
 
-  std::printf("     (red lamp is blinking at 2 Hz here -- sample the phase)\n");
+  std::printf("     (red lamp blinks at 2 Hz here)\n");
   for (int i = 0; i < 4; ++i) {
     dev.clock.advance(125);
     dev.monitor.poll();
@@ -172,8 +172,8 @@ void runFaults() {
 
     std::printf("  acquisition started: %s\n", bad.adc.running() ? "yes" : "no");
     std::printf(
-        "  -- the revision is unknown, so no digit can be turned into a\n"
-        "     temperature. The device annunciates and does not pretend.\n");
+        "  revision unknown so a digit cannot become a temperature\n"
+        "  the device faults instead of guessing\n");
   }
 
   header("identity record names an unsupported revision");
@@ -186,14 +186,14 @@ void runFaults() {
     if (!bad.monitor.init()) std::printf("  init failed: %s\n", toString(bad.monitor.fault()));
 
     std::printf(
-        "  -- refusing to run beats defaulting to Rev-A: a Rev-B board read\n"
-        "     as Rev-A shows 8.5 degC while it sits at 85 degC.\n");
+        "  refuses to run instead of guessing Rev-A\n"
+        "  a Rev-B board read as Rev-A shows 8.5 degC at a real 85 degC\n");
   }
 }
 
 // two devices in one process
 void runTwoAtOnce() {
-  header("two devices, different revisions, one process");
+  header("two devices with different revisions in one process");
 
   Device devA;
   Device devB;
@@ -211,8 +211,8 @@ void runTwoAtOnce() {
 int main() {
   colourInit();
 
-  std::printf("temperature monitor -- PC demonstration (C++)\n");
-  std::printf("sampling %u us, %zu samples per block, block every %u us\n",
+  std::printf("temperature monitor PC demonstration (C++)\n");
+  std::printf("sampling %u us  %zu samples per block  block every %u us\n",
               config::kSamplePeriodUs,
               config::kSamplesPerBlock,
               config::kBlockPeriodUs);

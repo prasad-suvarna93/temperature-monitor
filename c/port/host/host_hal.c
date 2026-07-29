@@ -1,5 +1,7 @@
 #ifdef HOST_BUILD
 
+// software model of every HAL module for tests and the demo
+
 #include "host_hal.h"
 
 #include <string.h>

@@ -1,3 +1,4 @@
+// timed ADC capture delivered in blocks by DMA
 // ADC is hardware triggered not polled
 #ifndef HAL_ADC_H
 #define HAL_ADC_H
